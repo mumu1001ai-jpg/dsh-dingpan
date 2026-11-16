@@ -25,11 +25,9 @@ pnpm publish --no-git-checks
 
 如果 `pnpm publish` 报 `401` / `404 Not Found - PUT`，说明本机 npm 客户端没读到 token
 （这个环境下 pnpm 的 whoami/publish 就是这样，但 registry 本身接受同一个 token）。
-可以直接用 registry API 发布：
-
-```bash
-node npm-publish.mjs          # 读取 package.json 与 %TEMP% 下的 tgz
-```
+兜底做法：直接对 `PUT https://registry.npmjs.org/dsh-dingpan` 发发布文档
+（`versions` + `dist-tags` + `_attachments` 里放 tgz 的 base64），`Authorization: Bearer <token>`，
+返回 `202 {"success":true}` 即受理，首次发布还会先落一个 `0.0.0-stage` 占位版本，1–2 分钟后正式版本顶上 `latest`。
 
 ## 凭据
 
