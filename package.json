@@ -1,6 +1,6 @@
 {
   "name": "dsh-dingpan",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "盯盘插件：A股 / 港股 / 美股 / 韩股 / 富时中国A50 实时行情，日周月K线，全球市场与板块，存储价格走势，以及任务栏价格胶囊。",
   "keywords": [
     "dsh",
