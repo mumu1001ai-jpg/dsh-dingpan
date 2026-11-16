@@ -1,67 +1,49 @@
-# 发布清单（dsh-dingpan 1.0.0）
+# 发布记录与后续流程
 
-包已改名并打包通过。剩下两步卡在凭据上：npm token 失效、本机没有 git / GitHub token。
+## 已发布
 
-## 1. npm
+| 渠道 | 地址 | 版本 |
+| --- | --- | --- |
+| npm | https://www.npmjs.com/package/dsh-dingpan | 1.0.1 |
+| GitHub | https://github.com/mumu1001ai-jpg/dsh-dingpan | main |
 
-现状：
-- `dsh-dingpan` 在 npm 上**这个名字是空的**（`GET registry.npmjs.org/dsh-dingpan` → 404），可以首发 1.0.0。
-- 但 `~/.npmrc` 里的 `_authToken` 已失效：`pnpm whoami` → `401 Unauthorized`，
-  `pnpm publish` → `404 Not Found - PUT https://registry.npmjs.org/dsh-dingpan`（npm 对无权限发布统一回 404，不是名字被占）。
+- npm 账号：`mumu1001ai`；首次发布会先落一个 `0.0.0-stage` 占位版本，等人工/自动审核通过后正式版本才替换掉 `latest`（约 1–2 分钟）。
+- GitHub 用一个 fine-grained token 通过 REST API 推送（本机没有 git）。
 
-补齐方式（任一）：
-
-```bash
-npm login                                    # 交互登录，写入新 token
-# 或
-npm config set //registry.npmjs.org:_authToken <新 token>
-```
-
-然后：
+## 发布新版本
 
 ```bash
-cd stock-watch
-pnpm pack                 # 已通过：dsh-dingpan-1.0.0.tgz
+# 1) 改版本号（语义化：功能 feat → minor，修复 fix → patch）
+npm version patch --no-git-tag-version
+
+# 2) 打包
+pnpm pack
+
+# 3) 发布
 pnpm publish --no-git-checks
 ```
 
-## 2. GitHub
-
-现状：本机没有 `git`、没有 `gh`、没有 GitHub token，无法推送。
-
-补齐方式（任一）：
-
-- **给一个 GitHub PAT（`repo` 权限）**：可以不装 git，直接用 REST API 建仓库并上传全部文件。
-- 或者网页上新建仓库，把 `docs/dsh-dingpan-1.0.0-source.zip` 解压后拖进去。
-
-命令行推送（仓库已建好时）：
+如果 `pnpm publish` 报 `401` / `404 Not Found - PUT`，说明本机 npm 客户端没读到 token
+（这个环境下 pnpm 的 whoami/publish 就是这样，但 registry 本身接受同一个 token）。
+可以直接用 registry API 发布：
 
 ```bash
-cd stock-watch
-git init
-git add .
-git commit -m "feat: 盯盘 dsh-dingpan 1.0 — K线周期/全球市场/板块/存储价格/任务栏胶囊"
-git branch -M main
-git remote add origin https://github.com/<你的用户名>/dsh-dingpan.git
-git push -u origin main
+node npm-publish.mjs          # 读取 package.json 与 %TEMP% 下的 tgz
 ```
 
-## 3. 发布前替换占位符
+## 凭据
 
-`package.json` 里的 `repository` / `homepage` / `bugs` 仍是 `YOUR_GITHUB_USER`：
+- npm token：`~/Desktop/npm.txt`（granular token，勾了 Bypass 2FA，写着 7 天有效期 → 过期后重新生成）
+- GitHub token：`~/Desktop/githubtoken.txt`（fine-grained，`repo` 权限）
+- 两个文件都不要提交进仓库，用完删除或撤销。
 
-```bash
-grep -n YOUR_GITHUB_USER package.json
-```
-
-## 4. 产物
+## 产物
 
 | 文件 | 说明 |
 | --- | --- |
-| `docs/screenshots/watch.png` | 自选 + K 线（1280×796） |
-| `docs/screenshots/world.png` | 全球市场（1280×596） |
-| `docs/screenshots/sectors.png` | 板块（1280×856） |
-| `docs/screenshots/storage.png` | 存储价格（1280×1056） |
-| `docs/screenshots/pill.png` | 任务栏胶囊（601×64，透明底） |
+| `docs/screenshots/watch.png` | 自选 + K 线 |
+| `docs/screenshots/world.png` | 全球市场 |
+| `docs/screenshots/sectors.png` | 板块 |
+| `docs/screenshots/storage.png` | 存储价格 |
+| `docs/screenshots/pill*.png` | 任务栏胶囊 |
 | `docs/promo/preview.html` | 宣传图源文件（真实数据渲染） |
-| `docs/dsh-dingpan-1.0.0-source.zip` | 可拖进 GitHub 的源码包 |
