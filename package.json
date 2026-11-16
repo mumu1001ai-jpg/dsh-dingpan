@@ -1,0 +1,64 @@
+{
+  "name": "dsh-dingpan",
+  "version": "1.0.0",
+  "description": "盯盘插件：A股 / 港股 / 美股 / 韩股 / 富时中国A50 实时行情，日周月K线，全球市场与板块，存储价格走势，以及任务栏价格胶囊。",
+  "keywords": [
+    "dsh",
+    "deepseek",
+    "deepseek-harness",
+    "plugin",
+    "dsh-plugin",
+    "stock",
+    "a-share",
+    "hk-stocks",
+    "us-stocks",
+    "kline",
+    "taskbar",
+    "行情",
+    "盯盘",
+    "自选股"
+  ],
+  "license": "MIT",
+  "author": "mumu",
+  "type": "module",
+  "main": "index.js",
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "ticker.py",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "docs/screenshots/*.png"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mumu1001ai-jpg/dsh-dingpan.git"
+  },
+  "homepage": "https://github.com/mumu1001ai-jpg/dsh-dingpan#readme",
+  "bugs": {
+    "url": "https://github.com/mumu1001ai-jpg/dsh-dingpan/issues"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  }
+}

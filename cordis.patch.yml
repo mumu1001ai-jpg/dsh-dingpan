@@ -1,0 +1,3 @@
+- insert:
+    - id: stock-watch
+      name: '@local/dsh-stock-watch'
