@@ -4,12 +4,14 @@
 
 | 渠道 | 地址 | 版本 |
 | --- | --- | --- |
-| npm | https://www.npmjs.com/package/dsh-dingpan | 1.0.3（待发 1.1.0：暗盘页签） |
-| GitHub | https://github.com/mumu1001ai-jpg/dsh-dingpan | main（落后于本地 1.1.0） |
-| awesome-dsh-plugin | PR #16091 已合并 | 条目描述是 1.0.3 的功能，更新需新开 PR |
+| npm | https://www.npmjs.com/package/dsh-dingpan | 1.1.1（2026-11-26 发布，含暗盘页签） |
+| GitHub | https://github.com/mumu1001ai-jpg/dsh-dingpan | main @ 1.1.1 |
+| awesome-dsh-plugin | PR #16091 已合并 | 1.1.x 描述更新分支 `update-dsh-dingpan-darkpool` 已推送，待开 PR |
 
-- npm 账号：`mumu1001ai`；首次发布会先落一个 `0.0.0-stage` 占位版本，等人工/自动审核通过后正式版本才替换掉 `latest`（约 1–2 分钟）。
-- GitHub 用一个 fine-grained token 通过 REST API 推送（本机没有 git）。
+- npm 账号：`mumu1001ai`；Token 用 `~/Desktop/npm.txt`（granular，勾了 Bypass 2FA），写进包目录的 `.npmrc` 后 `pnpm publish --no-git-checks`，**跑完删掉 `.npmrc`**。
+- 发布后注册表会先返回 `Your package is being processed and may take a few minutes to become available.`，这段时间内再发同版本会报 `409 Cannot publish over previously staged version`，**不要急着换版本号**，等 1–20 分钟再看 `https://registry.npmjs.org/<pkg>` 的 versions 是否出现。
+- GitHub 用一个 fine-grained token 通过 REST API 推送（本机没有 git 命令）。这个 token 只有 contents 权限，**开不了 PR**；awesome-dsh-plugin 的 PR 需要人在网页上点一下（用 compare 链接）。
+- 暗盘取 OKX / Bitget 报价需要开启代理；README 顶部、面板内、npm 描述和 awesome 条目都写明了。
 
 ## 发布新版本
 
@@ -28,12 +30,12 @@ pnpm publish --no-git-checks
 （这个环境下 pnpm 的 whoami/publish 就是这样，但 registry 本身接受同一个 token）。
 兜底做法：直接对 `PUT https://registry.npmjs.org/dsh-dingpan` 发发布文档
 （`versions` + `dist-tags` + `_attachments` 里放 tgz 的 base64），`Authorization: Bearer <token>`，
-返回 `202 {"success":true}` 即受理，首次发布还会先落一个 `0.0.0-stage` 占位版本，1–2 分钟后正式版本顶上 `latest`。
+返回 `202 {"success":true}` 即受理。若返回 `409 Cannot publish over previously staged version`，说明该版本已在处理队列里，等它落库即可。
 
 ## 凭据
 
 - npm token：`~/Desktop/npm.txt`（granular token，勾了 Bypass 2FA，写着 7 天有效期 → 过期后重新生成）
-- GitHub token：`~/Desktop/githubtoken.txt`（fine-grained，`repo` 权限）
+- GitHub token：`~/Desktop/githubtoken.txt`（fine-grained，contents 读写；**没有 Pull requests 权限**）
 - 两个文件都不要提交进仓库，用完删除或撤销。
 
 ## 产物
