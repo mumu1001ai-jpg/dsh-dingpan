@@ -4,8 +4,9 @@
 
 | 渠道 | 地址 | 版本 |
 | --- | --- | --- |
-| npm | https://www.npmjs.com/package/dsh-dingpan | 1.0.1 |
-| GitHub | https://github.com/mumu1001ai-jpg/dsh-dingpan | main |
+| npm | https://www.npmjs.com/package/dsh-dingpan | 1.0.3（待发 1.1.0：暗盘页签） |
+| GitHub | https://github.com/mumu1001ai-jpg/dsh-dingpan | main（落后于本地 1.1.0） |
+| awesome-dsh-plugin | PR #16091 已合并 | 条目描述是 1.0.3 的功能，更新需新开 PR |
 
 - npm 账号：`mumu1001ai`；首次发布会先落一个 `0.0.0-stage` 占位版本，等人工/自动审核通过后正式版本才替换掉 `latest`（约 1–2 分钟）。
 - GitHub 用一个 fine-grained token 通过 REST API 推送（本机没有 git）。

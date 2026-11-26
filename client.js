@@ -3,7 +3,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react');
     const h = React.createElement;
-    const { useEffect, useMemo, useState } = React;
+    const { useEffect, useMemo, useRef, useState } = React;
 
     const NS = 'stock-watch';
     const STORAGE_KEY = 'dsh.stock-watch.watchlist.v1';
@@ -14,6 +14,86 @@ window.__ModuleLoader__.load({
     const MAX_CODES = 20;
     const REFRESH_MS = 30_000;
     const REQUEST_TIMEOUT_MS = 30_000;
+
+    // Dark-pool (US-stock perpetuals listed on crypto exchanges) reads public
+    // REST endpoints straight from the page: the browser already carries the
+    // user's system proxy, which the Host's fetch does not.
+    const DARK_LIST_KEY = 'dsh.stock-watch.darkpool.v1';
+    const DARK_RATE_KEY = 'dsh.stock-watch.darkpool.rate.v1';
+    const DARK_LIVE_KEY = 'dsh.stock-watch.darkpool.live.v1';
+    const DARK_MAX = 24;
+    const DARK_RATES = [5_000, 10_000, 30_000, 60_000];
+    const DARK_DEFAULT_RATE = 10_000;
+    const DARK_SEED_BASES = ['SNDK', 'MU', 'NVDA'];
+    const DARK_CANDLE_TTL_MS = 60_000;
+    const DARK_REQUEST_TIMEOUT_MS = 12_000;
+    const DARK_RETRY_MS = 60_000;
+    const DARK_RESOLVE_BUDGET_MS = 15_000;
+    const DARK_PROBE_TIMEOUT_MS = 5_000;
+    const DARK_CNY_KEY = 'dsh.stock-watch.darkpool.cny.v1';
+    const DARK_CNY_ON_KEY = 'dsh.stock-watch.darkpool.cnyon.v1';
+    const DARK_BASIS_KEY = 'dsh.stock-watch.darkpool.basis.v1';
+    const DARK_FX_TTL_MS = 10 * 60_000;
+    const DARK_ASHARE_TTL_MS = 60_000;
+    const CST_OFFSET_MS = 8 * 3600_000;
+    /** Tokenised A-shares the panel can price against: base -> A-share code. */
+    const DARK_ASHARE = { GIGADEV: 'SH603986', ZHONGJI: 'SZ300308' };
+    const DARK_FRAMES = { '15m': { bars: 96 }, '1h': { bars: 72 }, '1d': { bars: 120 } };
+    const DARK_SOURCE_LABELS = {
+      okx: 'darkSourceOkx',
+      'okx-spot': 'darkSourceOkxSpot',
+      bitget: 'darkSourceBitget',
+      gate: 'darkSourceGate',
+    };
+    const DARK_NAMES = {
+      SNDK: { zh: '闪迪', en: 'SanDisk' },
+      GIGADEV: { zh: '兆易创新', en: 'GigaDevice' },
+      MU: { zh: '美光', en: 'Micron' },
+      NVDA: { zh: '英伟达', en: 'NVIDIA' },
+      TSLA: { zh: '特斯拉', en: 'Tesla' },
+      AAPL: { zh: '苹果', en: 'Apple' },
+      MSFT: { zh: '微软', en: 'Microsoft' },
+      GOOGL: { zh: '谷歌', en: 'Alphabet' },
+      AMZN: { zh: '亚马逊', en: 'Amazon' },
+      META: { zh: 'Meta', en: 'Meta' },
+      AMD: { zh: 'AMD', en: 'AMD' },
+      AVGO: { zh: '博通', en: 'Broadcom' },
+      TSM: { zh: '台积电', en: 'TSMC' },
+      INTC: { zh: '英特尔', en: 'Intel' },
+      WDC: { zh: '西部数据', en: 'Western Digital' },
+      STX: { zh: '希捷', en: 'Seagate' },
+      PLTR: { zh: 'Palantir', en: 'Palantir' },
+      COIN: { zh: 'Coinbase', en: 'Coinbase' },
+      MSTR: { zh: 'Strategy', en: 'Strategy' },
+      SMCI: { zh: '超微电脑', en: 'Supermicro' },
+      ORCL: { zh: '甲骨文', en: 'Oracle' },
+      NFLX: { zh: '奈飞', en: 'Netflix' },
+      BABA: { zh: '阿里巴巴', en: 'Alibaba' },
+      PDD: { zh: '拼多多', en: 'PDD' },
+      JD: { zh: '京东', en: 'JD' },
+      NIO: { zh: '蔚来', en: 'NIO' },
+      XPEV: { zh: '小鹏', en: 'XPeng' },
+      LI: { zh: '理想', en: 'Li Auto' },
+      BIDU: { zh: '百度', en: 'Baidu' },
+      ARM: { zh: 'Arm', en: 'Arm' },
+      QCOM: { zh: '高通', en: 'Qualcomm' },
+      MRVL: { zh: '迈威尔', en: 'Marvell' },
+      CRWV: { zh: 'CoreWeave', en: 'CoreWeave' },
+      UBER: { zh: '优步', en: 'Uber' },
+      HOOD: { zh: 'Robinhood', en: 'Robinhood' },
+      DIS: { zh: '迪士尼', en: 'Disney' },
+      BA: { zh: '波音', en: 'Boeing' },
+      JPM: { zh: '摩根大通', en: 'JPMorgan' },
+      V: { zh: 'Visa', en: 'Visa' },
+      WMT: { zh: '沃尔玛', en: 'Walmart' },
+      COST: { zh: '好市多', en: 'Costco' },
+      XOM: { zh: '埃克森美孚', en: 'Exxon' },
+      LLY: { zh: '礼来', en: 'Eli Lilly' },
+      MO: { zh: '奥驰亚', en: 'Altria' },
+      MCD: { zh: '麦当劳', en: "McDonald's" },
+      NKE: { zh: '耐克', en: 'Nike' },
+      PYPL: { zh: 'PayPal', en: 'PayPal' },
+    };
 
     const ZH = {
       nav: '盯盘',
@@ -187,6 +267,65 @@ window.__ModuleLoader__.load({
       lastBar: '最新交易日 {date}',
       dataSource: '数据源：腾讯 / 东方财富公开行情（港股为实时快照）',
       disclaimerShort: '量化统计，仅供参考',
+      tabDark: '暗盘',
+      darkLead: '暗盘',
+      darkNote: 'OKX / Bitget / Gate 股票永续，24 小时连续报价',
+      darkRate: '刷新频率',
+      darkRate5: '5 秒',
+      darkRate10: '10 秒',
+      darkRate30: '30 秒',
+      darkRate60: '1 分钟',
+      darkLiveOn: '实时获取',
+      darkLiveOff: '已暂停',
+      darkLiveHint: '关闭后不再自动请求行情，仍可点「刷新」手动获取一次',
+      darkLiveLabel: '实时获取行情',
+      darkAddPlaceholder: '输入代码，如 SNDKUSDT',
+      darkAddHint: '支持 SNDKUSDT、SNDK、SNDK-USDT、SNDK-USDT-SWAP 等写法；逗号分隔可一次添加多只。优先取 USDT 永续，没有时回退现货或其它交易所。',
+      darkLimit: '暗盘自选最多 {n} 只。',
+      darkAddError: '未识别：{codes}。请输入股票代码，如 SNDKUSDT。',
+      darkMissing: '这些代码在 OKX / Bitget / Gate 都没有行情：{codes}',
+      darkUnresolved: '找不到行情',
+      darkTimedOut: '请求超时，这些代码没能在 15 秒内确认：{codes}。请检查代理后重试。',
+      darkCandleFailed: '该周期的 K 线暂时取不到。',
+      darkCny: '人民币',
+      darkCnyHint: '把 USDT 报价换算成人民币显示；汇率取欧易的 USDT/CNY 参考价，每 10 分钟刷新一次',
+      darkCnyRate: '汇率 1 USDT ≈ {rate} CNY（欧易参考）',
+      darkCnyCached: '汇率 1 USDT ≈ {rate} CNY（{time} 取得，暂用缓存）',
+      darkCnyUnavailable: '汇率暂不可用，人民币价先隐藏；代理可用后会自动补上。',
+      darkBasis: '涨跌口径',
+      darkBasis24h: '24 小时',
+      darkBasisClose: '上次休市以来',
+      darkBasisTag24h: '24h',
+      darkBasisTagClose: '自休市',
+      darkRef: '基准',
+      darkRefPending: '基准价计算中…',
+      darkPremium: '对 A 股折溢价',
+      darkAshare: 'A 股',
+      darkAshareLive: '盘中',
+      darkAshareClose: '收盘',
+      darkAshareMissing: 'A 股对照取不到',
+      darkEmptyTitle: '还没有暗盘自选',
+      darkEmptyBody: '添加一只在加密交易所上架的股票永续，例如闪迪 SNDKUSDT。',
+      darkEmptyExamples: '常见代码：SNDK、MU、NVDA、TSLA、AAPL',
+      darkStale: '行情接口暂时不可用，显示的是上一次数据。',
+      darkResolving: '识别中',
+      darkWaiting: '等待行情…',
+      darkChartTitle: '价格走势',
+      darkChartNoData: '暂无该周期的 K 线数据。',
+      darkFrame15: '15 分钟',
+      darkFrame1h: '1 小时',
+      darkFrame1d: '日线',
+      darkBarCount: '{n} 根',
+      darkHigh: '24h 最高',
+      darkLow: '24h 最低',
+      darkVolume: '24h 成交额',
+      darkUpdated: '更新于 {time}',
+      darkSourceOkx: 'OKX 永续',
+      darkSourceOkxSpot: 'OKX 现货',
+      darkSourceBitget: 'Bitget 永续',
+      darkSourceGate: 'Gate 永续',
+      darkSourceNote: '数据来源：OKX / Bitget / Gate 公共行情接口，浏览器经本机代理直连；仅行情展示，不构成投资建议。',
+      darkProxyNote: '⚠ OKX / Bitget 的报价需要开启代理（VPN / 系统代理）才能获取；未开代理时会自动改用可直连的 Gate 报价。',
     };
 
     const EN = {
@@ -361,6 +500,65 @@ window.__ModuleLoader__.load({
       lastBar: 'Last session {date}',
       dataSource: 'Source: public Tencent / Eastmoney quotes (live Hong Kong snapshot)',
       disclaimerShort: 'Quantitative statistics only',
+      tabDark: 'Dark pool',
+      darkLead: 'Dark pool',
+      darkNote: 'US-stock perpetuals on OKX / Bitget / Gate, quoted around the clock',
+      darkRate: 'Refresh interval',
+      darkRate5: '5 s',
+      darkRate10: '10 s',
+      darkRate30: '30 s',
+      darkRate60: '1 min',
+      darkLiveOn: 'Live',
+      darkLiveOff: 'Paused',
+      darkLiveHint: 'When off, no quotes are requested automatically; the refresh button still fetches once',
+      darkLiveLabel: 'Live quotes',
+      darkAddPlaceholder: 'Symbol, e.g. SNDKUSDT',
+      darkAddHint: 'Accepts SNDKUSDT, SNDK, SNDK-USDT, SNDK-USDT-SWAP; separate several with commas. USDT perpetuals win, spot or another venue is the fallback.',
+      darkLimit: 'At most {n} dark-pool symbols.',
+      darkAddError: 'Unrecognised: {codes}. Enter a ticker such as SNDKUSDT.',
+      darkMissing: 'No quote for these symbols on OKX / Bitget / Gate: {codes}',
+      darkUnresolved: 'No quote found',
+      darkTimedOut: 'Timed out: these symbols were not confirmed within 15 s: {codes}. Check the proxy and retry.',
+      darkCandleFailed: 'Candles for this timeframe are unavailable.',
+      darkCny: 'CNY',
+      darkCnyHint: 'Show USDT quotes converted to CNY at the OKX USDT/CNY reference rate, refreshed every 10 minutes',
+      darkCnyRate: 'FX 1 USDT ≈ {rate} CNY (OKX reference)',
+      darkCnyCached: 'FX 1 USDT ≈ {rate} CNY (cached from {time})',
+      darkCnyUnavailable: 'The FX rate is unavailable, so CNY prices are hidden until the proxy works again.',
+      darkBasis: 'Change basis',
+      darkBasis24h: 'Rolling 24h',
+      darkBasisClose: 'Since last A-share close',
+      darkBasisTag24h: '24h',
+      darkBasisTagClose: 'since close',
+      darkRef: 'Baseline',
+      darkRefPending: 'Baseline loading…',
+      darkPremium: 'Premium vs A-share',
+      darkAshare: 'A-share',
+      darkAshareLive: 'live',
+      darkAshareClose: 'close',
+      darkAshareMissing: 'A-share reference unavailable',
+      darkEmptyTitle: 'No dark-pool symbols yet',
+      darkEmptyBody: 'Add a stock perpetual listed on a crypto exchange, such as SanDisk SNDKUSDT.',
+      darkEmptyExamples: 'Common: SNDK, MU, NVDA, TSLA, AAPL',
+      darkStale: 'The quote endpoint is unavailable; the last data stays on screen.',
+      darkResolving: 'Resolving',
+      darkWaiting: 'Waiting for quotes…',
+      darkChartTitle: 'Price trend',
+      darkChartNoData: 'No candles for this timeframe yet.',
+      darkFrame15: '15 min',
+      darkFrame1h: '1 hour',
+      darkFrame1d: 'Daily',
+      darkBarCount: '{n} bars',
+      darkHigh: '24h high',
+      darkLow: '24h low',
+      darkVolume: '24h turnover',
+      darkUpdated: 'Updated {time}',
+      darkSourceOkx: 'OKX perp',
+      darkSourceOkxSpot: 'OKX spot',
+      darkSourceBitget: 'Bitget perp',
+      darkSourceGate: 'Gate perp',
+      darkSourceNote: 'Source: public OKX / Bitget / Gate endpoints, fetched by the page through the local proxy; quotes only, not investment advice.',
+      darkProxyNote: '⚠ OKX / Bitget quotes require a proxy (VPN or system proxy). Without one the panel falls back to the directly reachable Gate feed.',
     };
 
     const CSS = `
@@ -658,6 +856,12 @@ window.__ModuleLoader__.load({
       .sw-btn:hover { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l2); }
       .sw-btn:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
       .sw-btn:disabled { cursor: default; opacity: .62; }
+      /* Two labels share one grid cell, so the wider one reserves the width.
+         "刷新" -> "刷新中" (and Live -> Paused) no longer widen the control and
+         shift every neighbour in the toolbar. */
+      .sw-stable-label { display: grid; justify-items: center; }
+      .sw-stable-item { grid-area: 1 / 1; white-space: nowrap; }
+      .sw-stable-item.is-hidden { visibility: hidden; }
       .sw-btn-primary {
         border-color: var(--dsw-alias-brand-primary);
         color: var(--dsw-alias-brand-primary);
@@ -1058,6 +1262,150 @@ window.__ModuleLoader__.load({
       }
       .sw-inline-empty strong { color: var(--dsw-alias-label-primary); font-size: 14px; }
       .sw-inline-empty p { margin: 0; font-size: 11.5px; line-height: 1.55; }
+      .sw-dark {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .sw-dark-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 12px 24px 11px;
+        border-bottom: 1px solid var(--dsw-alias-border-l1);
+      }
+      .sw-dark-lead {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+      .sw-dark-lead strong { font-size: 13px; font-weight: 600; }
+      .sw-dark-lead span { font-size: 11px; line-height: 1.5; color: var(--dsw-alias-label-secondary); }
+      .sw-dark-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .sw-dark-rate {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--dsw-alias-label-secondary);
+        white-space: nowrap;
+      }
+      .sw-select {
+        border: 1px solid var(--dsw-alias-border-l1);
+        background: var(--dsw-alias-bg-layer-1);
+        color: var(--dsw-alias-label-primary);
+        border-radius: 8px;
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 7px;
+        cursor: pointer;
+        transition: border-color .15s ease;
+      }
+      .sw-select:hover { border-color: var(--dsw-alias-border-l2); }
+      .sw-select:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+      .sw-switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 30px;
+        padding: 0 11px 0 5px;
+        border: 1px solid var(--dsw-alias-border-l1);
+        border-radius: 999px;
+        background: var(--dsw-alias-bg-layer-1);
+        color: var(--dsw-alias-label-secondary);
+        font: inherit;
+        font-size: 11.5px;
+        cursor: pointer;
+        transition: color .15s ease, border-color .15s ease, background .15s ease;
+      }
+      .sw-switch:hover { border-color: var(--dsw-alias-border-l2); }
+      .sw-switch:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+      .sw-switch.is-on {
+        color: var(--dsw-alias-brand-primary);
+        border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, var(--dsw-alias-border-l1));
+        background: color-mix(in srgb, var(--dsw-alias-brand-primary) 9%, transparent);
+      }
+      .sw-switch-track {
+        position: relative;
+        flex: none;
+        width: 26px;
+        height: 15px;
+        border-radius: 999px;
+        background: var(--dsw-alias-state-idle-primary);
+        opacity: .5;
+        transition: background .15s ease, opacity .15s ease;
+      }
+      .sw-switch.is-on .sw-switch-track { background: var(--dsw-alias-brand-primary); opacity: 1; }
+      .sw-switch-thumb {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: var(--dsw-alias-bg-base);
+        transition: transform .15s ease;
+      }
+      .sw-switch.is-on .sw-switch-thumb { transform: translateX(11px); }
+      .sw-dark-chart { width: 100%; height: auto; display: block; }
+      .sw-card-cny { color: var(--dsw-alias-label-primary); opacity: .82; font-variant-numeric: tabular-nums; }
+      .sw-cny {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--dsw-alias-label-secondary);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .sw-basis-tag {
+        align-self: center;
+        padding: 2px 7px;
+        border: 1px solid var(--dsw-alias-border-l1);
+        border-radius: 999px;
+        font-size: 10px;
+        line-height: 1.4;
+        color: var(--dsw-alias-label-secondary);
+        white-space: nowrap;
+      }
+      .sw-dark-facts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+        margin-top: 8px;
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--dsw-alias-label-secondary);
+        font-variant-numeric: tabular-nums;
+      }
+      .sw-sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .sw-dark-note { margin: 10px 0 0; font-size: 10px; line-height: 1.6; color: var(--dsw-alias-label-secondary); }
+      .sw-dark-proxy { color: var(--dsw-alias-state-warn-primary); opacity: .9; }
+      .sw-dark-range { font-size: 10.5px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+      @media (max-width: 1120px) {
+        .sw-dark-bar { padding: 12px 18px 11px; }
+      }
+      @media (max-width: 940px) {
+        .sw-dark { overflow: visible; }
+        .sw-dark-bar { padding: 12px 18px 11px; }
+      }
+      @media (max-width: 640px) {
+        .sw-dark-bar { padding: 12px 14px 11px; }
+      }
       @media (max-width: 1120px) {
         .sw-body { grid-template-columns: 260px minmax(0, 1fr); padding: 14px 18px 18px; }
         .sw-header { padding: 16px 18px 13px; }
@@ -1497,7 +1845,7 @@ window.__ModuleLoader__.load({
             disabled: loading,
           },
             h(RefreshIcon, { spinning: loading }),
-            loading ? t('updating') : t('refresh'),
+            h(SwLabel, { first: t('refresh'), second: t('updating'), showSecond: loading }),
           ),
         ),
         failed ? h('div', { className: 'sw-notice' }, h('span', null, t('worldFailed'))) : null,
@@ -1596,7 +1944,7 @@ window.__ModuleLoader__.load({
           ),
           h('button', { type: 'button', className: 'sw-btn', onClick: reload, disabled: loading },
             h(RefreshIcon, { spinning: loading }),
-            loading ? t('updating') : t('refresh'),
+            h(SwLabel, { first: t('refresh'), second: t('updating'), showSecond: loading }),
           ),
         ),
         failed ? h('div', { className: 'sw-notice' }, h('span', null, t('sectorsFailed'))) : null,
@@ -1726,7 +2074,7 @@ window.__ModuleLoader__.load({
           ),
           h('button', { type: 'button', className: 'sw-btn', onClick: reload, disabled: loading },
             h(RefreshIcon, { spinning: loading }),
-            loading ? t('updating') : t('refresh'),
+            h(SwLabel, { first: t('refresh'), second: t('updating'), showSecond: loading }),
           ),
         ),
         failed ? h('div', { className: 'sw-notice' }, h('span', null, t('storageFailed'))) : null,
@@ -1786,6 +2134,1351 @@ window.__ModuleLoader__.load({
               ),
             )
           : null,
+      );
+    }
+
+    // ---------------------------------------------------------------------
+    // Dark pool: US-stock perpetuals listed on crypto exchanges
+    // ---------------------------------------------------------------------
+
+    function toNumber(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    }
+
+    /** Accepts SNDKUSDT / SNDK-USDT / SNDK-USDT-SWAP / US.SNDK and returns SNDK. */
+    function darkBaseOf(raw) {
+      let value = String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
+      if (!value) return '';
+      value = value.replace(/^US\./, '').replace(/\.US$/, '');
+      value = value.replace(/-USDT-SWAP$/, '').replace(/-USDT$/, '').replace(/_USDT$/, '').replace(/USDT$/, '');
+      value = value.replace(/-PERP$/, '');
+      return /^[A-Z0-9]{1,10}$/.test(value) ? value : '';
+    }
+
+    function darkName(base) {
+      const entry = DARK_NAMES[base];
+      if (!entry) return base;
+      return isChinese() ? entry.zh : entry.en;
+    }
+
+    function darkSourceName(item, t) {
+      const key = item && DARK_SOURCE_LABELS[item.src];
+      return key ? t(key) : '';
+    }
+
+    function darkRateLabel(value, t) {
+      if (value === 5_000) return t('darkRate5');
+      if (value === 10_000) return t('darkRate10');
+      if (value === 30_000) return t('darkRate30');
+      return t('darkRate60');
+    }
+
+    function fmtDarkPrice(value) {
+      if (!Number.isFinite(value)) return '—';
+      const size = Math.abs(value);
+      const digits = size >= 100 ? 2 : size >= 1 ? 3 : 5;
+      return value.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    }
+
+    function fmtCny(value) {
+      if (!Number.isFinite(value)) return '—';
+      return `¥${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    function loadDarkCny() {
+      try {
+        const raw = JSON.parse(window.localStorage.getItem(DARK_CNY_KEY) || 'null');
+        const rate = raw ? Number(raw.rate) : 0;
+        if (Number.isFinite(rate) && rate > 0) return { rate, at: Number(raw.at) || 0 };
+      } catch {
+        // fall through
+      }
+      return null;
+    }
+
+    function saveDarkCny(value) {
+      try {
+        window.localStorage.setItem(DARK_CNY_KEY, JSON.stringify(value));
+      } catch {
+        // ignore
+      }
+    }
+
+    function loadDarkCnyOn() {
+      try {
+        return window.localStorage.getItem(DARK_CNY_ON_KEY) !== '0';
+      } catch {
+        return true;
+      }
+    }
+
+    function saveDarkCnyOn(value) {
+      try {
+        window.localStorage.setItem(DARK_CNY_ON_KEY, value ? '1' : '0');
+      } catch {
+        // ignore
+      }
+    }
+
+    function loadDarkBasis() {
+      try {
+        const raw = window.localStorage.getItem(DARK_BASIS_KEY);
+        if (raw === 'close' || raw === '24h') return raw;
+      } catch {
+        // fall through
+      }
+      return '24h';
+    }
+
+    function saveDarkBasis(value) {
+      try {
+        window.localStorage.setItem(DARK_BASIS_KEY, value);
+      } catch {
+        // ignore
+      }
+    }
+
+    /** Read a wall-clock instant as Asia/Shanghai parts. */
+    function cstTime(ms) {
+      return new Date(ms + CST_OFFSET_MS);
+    }
+
+    function cstStamp(parts) {
+      return Date.UTC(parts.y, parts.m, parts.d, parts.h, parts.min) - CST_OFFSET_MS;
+    }
+
+    /**
+     * The most recent completed A-share session close (15:00 Asia/Shanghai),
+     * walking back over weekends. CN holidays are approximated: a session that
+     * did not trade still exists as a timestamp on the token, which the label
+     * shows explicitly.
+     */
+    function darkSessionClose(nowMs) {
+      const now = cstTime(nowMs);
+      const parts = {
+        y: now.getUTCFullYear(),
+        m: now.getUTCMonth(),
+        d: now.getUTCDate(),
+        h: now.getUTCHours(),
+        min: now.getUTCMinutes(),
+      };
+      const todayClose = cstStamp({ ...parts, h: 15, min: 0 });
+      const probe = new Date(Date.UTC(parts.y, parts.m, parts.d));
+      const weekday = probe.getUTCDay();
+      const beforeClose = weekday >= 1 && weekday <= 5 && nowMs < todayClose;
+      if (beforeClose) probe.setUTCDate(probe.getUTCDate() - 1);
+      while (probe.getUTCDay() === 0 || probe.getUTCDay() === 6) probe.setUTCDate(probe.getUTCDate() - 1);
+      return cstStamp({
+        y: probe.getUTCFullYear(),
+        m: probe.getUTCMonth(),
+        d: probe.getUTCDate(),
+        h: 15,
+        min: 0,
+      });
+    }
+
+    /** 15:00 of the session an A-share quote belongs to, or null. */
+    function darkQuoteSessionClose(quoteTime) {
+      if (!quoteTime) return null;
+      const time = new Date(quoteTime);
+      if (Number.isNaN(time.getTime())) return null;
+      const q = cstTime(time.getTime());
+      return cstStamp({ y: q.getUTCFullYear(), m: q.getUTCMonth(), d: q.getUTCDate(), h: 15, min: 0 });
+    }
+
+    function darkStampLabel(ts) {
+      const date = cstTime(ts);
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      return `${month}-${day} 15:00`;
+    }
+
+    function darkBarLabel(ts, frame) {
+      const date = new Date(ts);
+      if (Number.isNaN(date.getTime())) return '';
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      if (frame === '1d') return `${month}-${day}`;
+      const hour = String(date.getHours()).padStart(2, '0');
+      const minute = String(date.getMinutes()).padStart(2, '0');
+      return frame === '1h' ? `${month}-${day} ${hour}:00` : `${month}-${day} ${hour}:${minute}`;
+    }
+
+    function loadDarkItems() {
+      let raw = null;
+      try {
+        raw = window.localStorage.getItem(DARK_LIST_KEY);
+      } catch {
+        raw = null;
+      }
+      if (raw == null) return DARK_SEED_BASES.map((base) => ({ base, src: '', inst: '' }));
+      try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        const seen = new Set();
+        const list = [];
+        for (const item of parsed) {
+          if (!item || typeof item.base !== 'string') continue;
+          const base = darkBaseOf(item.base);
+          if (!base || seen.has(base)) continue;
+          seen.add(base);
+          list.push({
+            base,
+            src: typeof item.src === 'string' ? item.src : '',
+            inst: typeof item.inst === 'string' ? item.inst : '',
+          });
+          if (list.length >= DARK_MAX) break;
+        }
+        return list;
+      } catch {
+        return [];
+      }
+    }
+
+    function saveDarkItems(items) {
+      try {
+        window.localStorage.setItem(DARK_LIST_KEY, JSON.stringify(items));
+      } catch {
+        // Quota or private mode: this view still works until the page reloads.
+      }
+    }
+
+    function loadDarkRate() {
+      try {
+        const value = Number(window.localStorage.getItem(DARK_RATE_KEY));
+        if (DARK_RATES.includes(value)) return value;
+      } catch {
+        // fall through to the default
+      }
+      return DARK_DEFAULT_RATE;
+    }
+
+    function saveDarkRate(value) {
+      try {
+        window.localStorage.setItem(DARK_RATE_KEY, String(value));
+      } catch {
+        // ignore
+      }
+    }
+
+    function loadDarkLive() {
+      try {
+        const raw = window.localStorage.getItem(DARK_LIVE_KEY);
+        if (raw === '0') return false;
+        if (raw === '1') return true;
+      } catch {
+        // fall through to the default
+      }
+      return true;
+    }
+
+    function saveDarkLive(value) {
+      try {
+        window.localStorage.setItem(DARK_LIVE_KEY, value ? '1' : '0');
+      } catch {
+        // ignore
+      }
+    }
+
+    async function darkJson(url, signal) {
+      const controller = new AbortController();
+      let timedOut = false;
+      const timer = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, DARK_REQUEST_TIMEOUT_MS);
+      const forward = () => controller.abort();
+      if (signal) {
+        if (signal.aborted) forward();
+        else signal.addEventListener('abort', forward, { once: true });
+      }
+      try {
+        const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        // A timeout is a real failure; an outer abort means the panel moved on.
+        throw timedOut ? new Error('timeout') : error;
+      } finally {
+        window.clearTimeout(timer);
+        if (signal) signal.removeEventListener('abort', forward);
+      }
+    }
+
+    /**
+     * Resolve a ticker across venues in parallel, keeping the most liquid listing.
+     * A black-holed domain must not hold the batch or hide a venue that answers:
+     * with the proxy off, OKX and Bitget are unreachable here while Gate answers.
+     * Returns the candidate, `null` when every venue confirmed no listing, or
+     * `{ timedOut: true }` when at least one venue could not be confirmed.
+     */
+    async function darkResolve(base, signal, deadline) {
+      const candidates = [
+        { base, src: 'okx', inst: `${base}-USDT-SWAP` },
+        { base, src: 'okx-spot', inst: `${base}-USDT` },
+        { base, src: 'okx-spot', inst: `X${base}-USDT` },
+        { base, src: 'bitget', inst: `${base}USDT` },
+        { base, src: 'gate', inst: `${base}_USDT` },
+      ];
+      const probe = async (candidate) => {
+        const remaining = deadline ? deadline - Date.now() : DARK_PROBE_TIMEOUT_MS;
+        if (remaining <= 0) return { timedOut: true };
+        const cap = Math.min(remaining, DARK_PROBE_TIMEOUT_MS);
+        const local = new AbortController();
+        const forward = () => local.abort();
+        if (signal) {
+          if (signal.aborted) local.abort();
+          else signal.addEventListener('abort', forward, { once: true });
+        }
+        const timer = window.setTimeout(() => local.abort(), cap);
+        try {
+          const quote = await darkQuote(candidate, local.signal);
+          if (quote && Number.isFinite(quote.price)) return { ok: candidate };
+          return {};
+        } catch (error) {
+          if (error && error.name === 'AbortError') {
+            if (signal && signal.aborted) throw error;
+            return { timedOut: true };
+          }
+          return {};
+        } finally {
+          window.clearTimeout(timer);
+          if (signal) signal.removeEventListener('abort', forward);
+        }
+      };
+      const results = await Promise.all(candidates.map(probe));
+      for (const result of results) {
+        if (result.ok) return result.ok;
+      }
+      return results.some((result) => result.timedOut) ? { timedOut: true } : null;
+    }
+
+    async function darkQuote(target, signal) {
+      if (!target || !target.inst) return null;
+      if (target.src === 'okx' || target.src === 'okx-spot') {
+        const body = await darkJson(`https://www.okx.com/api/v5/market/ticker?instId=${encodeURIComponent(target.inst)}`, signal);
+        const row = body && Array.isArray(body.data) ? body.data[0] : null;
+        if (!row) return null;
+        const price = toNumber(row.last);
+        const open = toNumber(row.open24h);
+        return {
+          price,
+          open,
+          changePct: price != null && open ? ((price - open) / open) * 100 : null,
+          high: toNumber(row.high24h),
+          low: toNumber(row.low24h),
+          volume: toNumber(row.volCcy24h),
+          ts: toNumber(row.ts),
+        };
+      }
+      if (target.src === 'bitget') {
+        const body = await darkJson(`https://api.bitget.com/api/v2/mix/market/ticker?symbol=${encodeURIComponent(target.inst)}&productType=USDT-FUTURES`, signal);
+        const row = body && Array.isArray(body.data) ? body.data[0] : null;
+        if (!row) return null;
+        const change = toNumber(row.change24h);
+        return {
+          price: toNumber(row.lastPr),
+          open: toNumber(row.open24h),
+          changePct: change == null ? null : change * 100,
+          high: toNumber(row.high24h),
+          low: toNumber(row.low24h),
+          volume: toNumber(row.usdtVolume),
+          ts: toNumber(row.ts),
+        };
+      }
+      if (target.src === 'gate') {
+        const body = await darkJson(`https://api.gateio.ws/api/v4/futures/usdt/tickers?contract=${encodeURIComponent(target.inst)}`, signal);
+        const row = Array.isArray(body) ? body[0] : null;
+        if (!row) return null;
+        const price = toNumber(row.last);
+        const change = toNumber(row.change_price);
+        return {
+          price,
+          open: price != null && change != null ? price - change : null,
+          changePct: toNumber(row.change_percentage),
+          high: toNumber(row.high_24h),
+          low: toNumber(row.low_24h),
+          volume: toNumber(row.volume_24h_quote) ?? toNumber(row.volume_24h_settle),
+          ts: Date.now(),
+        };
+      }
+      return null;
+    }
+
+    async function darkCandles(target, frame, signal) {
+      const limit = DARK_FRAMES[frame] ? DARK_FRAMES[frame].bars : 96;
+      if (target.src === 'okx' || target.src === 'okx-spot') {
+        const barToken = frame === '1d' ? '1D' : frame === '1h' ? '1H' : '15m';
+        const body = await darkJson(`https://www.okx.com/api/v5/market/candles?instId=${encodeURIComponent(target.inst)}&bar=${barToken}&limit=${limit}`, signal);
+        const rows = body && Array.isArray(body.data) ? body.data.slice().reverse() : [];
+        return rows
+          .map((row) => ({
+            t: Number(row[0]),
+            o: Number(row[1]),
+            h: Number(row[2]),
+            l: Number(row[3]),
+            c: Number(row[4]),
+            v: Number(row[7] ?? row[5] ?? 0),
+          }))
+          .filter((bar) => Number.isFinite(bar.t) && Number.isFinite(bar.c));
+      }
+      if (target.src === 'bitget') {
+        const granularity = frame === '1d' ? '1D' : frame === '1h' ? '1H' : '15m';
+        const body = await darkJson(`https://api.bitget.com/api/v2/mix/market/candles?symbol=${encodeURIComponent(target.inst)}&productType=USDT-FUTURES&granularity=${granularity}&limit=${limit}`, signal);
+        const rows = body && Array.isArray(body.data) ? body.data : [];
+        return rows
+          .map((row) => ({
+            t: Number(row[0]),
+            o: Number(row[1]),
+            h: Number(row[2]),
+            l: Number(row[3]),
+            c: Number(row[4]),
+            v: Number(row[6] ?? 0),
+          }))
+          .filter((bar) => Number.isFinite(bar.t) && Number.isFinite(bar.c));
+      }
+      if (target.src === 'gate') {
+        const interval = frame === '1d' ? '1d' : frame === '1h' ? '1h' : '15m';
+        const body = await darkJson(`https://api.gateio.ws/api/v4/futures/usdt/candlesticks?contract=${encodeURIComponent(target.inst)}&interval=${interval}&limit=${limit}`, signal);
+        const rows = Array.isArray(body) ? body : [];
+        return rows
+          .map((row) => ({
+            t: Number(row.t) * 1000,
+            o: Number(row.o),
+            h: Number(row.h),
+            l: Number(row.l),
+            c: Number(row.c),
+            v: Number(row.sum ?? row.v ?? 0),
+          }))
+          .filter((bar) => Number.isFinite(bar.t) && Number.isFinite(bar.c));
+      }
+      return [];
+    }
+
+    /** The token's price at one exact minute, used as the "since A-share close" baseline. */
+    async function darkClosePrice(target, ts, signal) {
+      if (!target || !target.inst || !Number.isFinite(ts)) return null;
+      const boundary = ts + 60_000;
+      if (target.src === 'okx' || target.src === 'okx-spot') {
+        const body = await darkJson(`https://www.okx.com/api/v5/market/history-candles?instId=${encodeURIComponent(target.inst)}&bar=1m&after=${boundary}&limit=1`, signal);
+        const row = body && Array.isArray(body.data) ? body.data[0] : null;
+        return row ? toNumber(row[1]) : null;
+      }
+      if (target.src === 'bitget') {
+        const body = await darkJson(`https://api.bitget.com/api/v2/mix/market/history-candles?symbol=${encodeURIComponent(target.inst)}&productType=USDT-FUTURES&granularity=1m&endTime=${boundary}&limit=1`, signal);
+        const rows = body && Array.isArray(body.data) ? body.data : [];
+        const row = rows[rows.length - 1];
+        return row ? toNumber(row[1]) : null;
+      }
+      if (target.src === 'gate') {
+        const second = Math.floor(ts / 1000);
+        const body = await darkJson(`https://api.gateio.ws/api/v4/futures/usdt/candlesticks?contract=${encodeURIComponent(target.inst)}&interval=1m&from=${second}&to=${second + 59}`, signal);
+        const row = Array.isArray(body) ? body[0] : null;
+        return row ? toNumber(row.o) : null;
+      }
+      return null;
+    }
+
+    function DarkSpark({ values, up }) {
+      const list = Array.isArray(values) ? values.filter((value) => Number.isFinite(value)).slice(-36) : [];
+      if (list.length < 2) return h('div', { className: 'sw-spark-empty' });
+
+      const width = 240;
+      const height = 30;
+      const min = Math.min(...list);
+      const max = Math.max(...list);
+      const span = max - min || 1;
+      const rising = typeof up === 'boolean' ? up : list[list.length - 1] >= list[0];
+      const points = list.map((value, index) => {
+        const x = (index / (list.length - 1)) * width;
+        const y = height - 2 - ((value - min) / span) * (height - 4);
+        return [x, y];
+      });
+      const sparkLine = points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
+      const area = `${sparkLine} L${width},${height} L0,${height} Z`;
+      const color = rising ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-success-primary)';
+
+      return h('svg', {
+        className: 'sw-spark',
+        viewBox: `0 0 ${width} ${height}`,
+        preserveAspectRatio: 'none',
+        'aria-hidden': true,
+      },
+        h('path', { d: area, fill: color, opacity: 0.08 }),
+        h('path', { d: sparkLine, fill: 'none', stroke: color, strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', vectorEffect: 'non-scaling-stroke' }),
+      );
+    }
+
+    function DarkChart({ bars, frame, loading, t }) {
+      const data = Array.isArray(bars) ? bars.slice(-120) : [];
+      if (data.length < 2) {
+        return h('div', { className: 'sw-inline-empty', style: { minHeight: 200 } },
+          h('p', null, loading ? t('loading') : t('darkChartNoData')));
+      }
+
+      const width = 760;
+      const height = 300;
+      const left = 60;
+      const right = 16;
+      const top = 12;
+      const bottom = 22;
+      const volumeHeight = 44;
+      const gap = 12;
+      const priceBottom = height - bottom - volumeHeight - gap;
+      const volumeBottom = height - bottom;
+
+      const highs = data.map((bar) => bar.h);
+      const lows = data.map((bar) => bar.l);
+      const volumes = data.map((bar) => bar.v ?? 0);
+      const maxPrice = Math.max(...highs);
+      const minPrice = Math.min(...lows);
+      const span = maxPrice - minPrice || 1;
+      const yMax = maxPrice + span * 0.06;
+      const yMin = minPrice - span * 0.06;
+      const plotWidth = width - left - right;
+      const x = (index) => left + (index / (data.length - 1)) * plotWidth;
+      const y = (value) => top + (1 - (value - yMin) / (yMax - yMin)) * (priceBottom - top);
+      const maxVolume = Math.max(...volumes) || 1;
+      const barWidth = Math.max(1.2, (plotWidth / data.length) * 0.62);
+      const upColor = 'var(--dsw-alias-state-error-primary)';
+      const downColor = 'var(--dsw-alias-state-success-primary)';
+      const lastClose = data[data.length - 1].c;
+      const ticks = Array.from(new Set([0, Math.floor((data.length - 1) / 2), data.length - 1]));
+
+      return h('svg', {
+        className: 'sw-dark-chart',
+        viewBox: `0 0 ${width} ${height}`,
+        role: 'img',
+        'aria-label': `${t('darkChartTitle')} ${frame}`,
+      },
+        [0, 0.5, 1].map((ratio) => {
+          const value = yMin + (yMax - yMin) * ratio;
+          const lineY = y(value);
+          return h('g', { key: `dark-grid-${ratio}` },
+            h('line', {
+              x1: left,
+              x2: width - right,
+              y1: lineY,
+              y2: lineY,
+              stroke: 'var(--dsw-alias-border-l1)',
+              strokeWidth: 1,
+              strokeDasharray: '3 4',
+            }),
+            h('text', {
+              x: left - 6,
+              y: lineY + 3,
+              textAnchor: 'end',
+              style: { fill: 'var(--dsw-alias-label-secondary)', fontSize: 10 },
+            }, fmtDarkPrice(value)),
+          );
+        }),
+        data.map((bar, index) => {
+          const color = bar.c >= bar.o ? upColor : downColor;
+          const bodyTop = y(Math.max(bar.o, bar.c));
+          const bodyBottom = y(Math.min(bar.o, bar.c));
+          return h('g', { key: `dark-c-${bar.t}-${index}` },
+            h('line', {
+              x1: x(index),
+              x2: x(index),
+              y1: y(bar.h),
+              y2: y(bar.l),
+              stroke: color,
+              strokeWidth: 1,
+            }),
+            h('rect', {
+              x: x(index) - barWidth / 2,
+              y: bodyTop,
+              width: barWidth,
+              height: Math.max(1, bodyBottom - bodyTop),
+              fill: color,
+              opacity: 0.92,
+            }),
+          );
+        }),
+        h('line', {
+          x1: left,
+          x2: width - right,
+          y1: y(lastClose),
+          y2: y(lastClose),
+          stroke: 'var(--dsw-alias-label-secondary)',
+          strokeWidth: 1,
+          strokeDasharray: '4 4',
+          opacity: 0.55,
+        }),
+        data.map((bar, index) => {
+          const barHeight = ((bar.v ?? 0) / maxVolume) * volumeHeight;
+          return h('rect', {
+            key: `dark-v-${bar.t}-${index}`,
+            x: x(index) - barWidth / 2,
+            y: volumeBottom - barHeight,
+            width: barWidth,
+            height: Math.max(1, barHeight),
+            fill: bar.c >= bar.o ? upColor : downColor,
+            opacity: 0.42,
+          });
+        }),
+        ticks.map((index) => h('text', {
+          key: `dark-x-${index}`,
+          x: x(index),
+          y: height - 5,
+          textAnchor: index === 0 ? 'start' : index === data.length - 1 ? 'end' : 'middle',
+          style: { fill: 'var(--dsw-alias-label-secondary)', fontSize: 10 },
+        }, darkBarLabel(data[index].t, frame))),
+      );
+    }
+
+    function DarkRow({ item, quote, history, active, onSelect, onRemove, fx, basisPct, t }) {
+      const price = quote && Number.isFinite(quote.price) ? quote.price : null;
+      const changePct = Number.isFinite(basisPct)
+        ? basisPct
+        : (quote && Number.isFinite(quote.changePct) ? quote.changePct : null);
+      const high = quote && Number.isFinite(quote.high) ? quote.high : null;
+      const low = quote && Number.isFinite(quote.low) ? quote.low : null;
+      const sourceLabel = darkSourceName(item, t);
+      const cny = fx && price != null ? fmtCny(price * fx.rate) : '';
+      const title = `${darkName(item.base)} ${item.base}${sourceLabel ? ` · ${sourceLabel}` : ''}${cny ? ` · ${cny}` : ''}`;
+      const numbers = high != null && low != null ? `↑ ${fmtDarkPrice(high)}  ↓ ${fmtDarkPrice(low)}` : '';
+      const meta = quote && quote.unresolved
+        ? (numbers ? `${t('darkUnresolved')} · ${numbers}` : t('darkUnresolved'))
+        : numbers || (item.src ? t('darkWaiting') : t('darkResolving'));
+      const metaTitle = quote && quote.unresolved
+        ? `${t('darkUnresolved')}${numbers ? ` · ${t('darkHigh')} ${fmtDarkPrice(high)} · ${t('darkLow')} ${fmtDarkPrice(low)}` : ''}`
+        : numbers
+          ? `${t('darkHigh')} ${fmtDarkPrice(high)} · ${t('darkLow')} ${fmtDarkPrice(low)}`
+          : meta;
+      const subtitle = `${item.base}${sourceLabel ? ` · ${sourceLabel}` : ''}${cny ? ` · ${cny}` : ''}`;
+
+      return h('div', { className: `sw-card${active ? ' is-active' : ''}` },
+        h('button', {
+          type: 'button',
+          className: 'sw-card-main',
+          onClick: onSelect,
+          'aria-pressed': active ? 'true' : 'false',
+          title,
+        },
+          h('div', { className: 'sw-card-top' },
+            h('span', { className: 'sw-card-name' }, darkName(item.base)),
+            h('span', { className: `sw-chg ${toneClass(changePct)}` }, fmtPct(changePct)),
+          ),
+          h('div', { className: `sw-card-sub${cny ? ' sw-card-cny' : ''}` }, subtitle),
+          h('div', { className: 'sw-price-row' },
+            h('span', { className: `sw-card-price ${toneClass(changePct)}` }, price == null ? '—' : fmtDarkPrice(price)),
+            h('span', { className: 'sw-card-meta', title: metaTitle },
+              quote && quote.failed ? t('darkStale') : meta),
+          ),
+          h(DarkSpark, { values: history, up: changePct == null ? true : changePct >= 0 }),
+        ),
+        h('button', {
+          type: 'button',
+          className: 'sw-del',
+          onClick: (event) => {
+            event.stopPropagation();
+            onRemove();
+          },
+          title: fill(t('remove'), { name: item.base }),
+          'aria-label': fill(t('remove'), { name: item.base }),
+        }, '×'),
+      );
+    }
+
+    function DarkDetail({ item, quote, bars, frame, loading, failed, onFrame, fx, cnyOn, basis, refInfo, ashare, premiumPct, t }) {
+      const price = quote && Number.isFinite(quote.price) ? quote.price : null;
+      const changePct = quote && Number.isFinite(quote.changePct) ? quote.changePct : null;
+      const high = quote && Number.isFinite(quote.high) ? quote.high : null;
+      const low = quote && Number.isFinite(quote.low) ? quote.low : null;
+      const volume = quote && Number.isFinite(quote.volume) ? quote.volume : null;
+      const cnyPrice = fx && price != null ? price * fx.rate : null;
+      const asof = quote && quote.ts
+        ? new Date(quote.ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+        : null;
+      const range = bars.length >= 2 ? `${darkBarLabel(bars[0].t, frame)} ~ ${darkBarLabel(bars[bars.length - 1].t, frame)}` : '';
+      const sourceLabel = darkSourceName(item, t);
+      const changeForBasis = basis === 'close' && refInfo && Number.isFinite(refInfo.price) && price != null
+        ? ((price - refInfo.price) / refInfo.price) * 100
+        : changePct;
+      const ashareState = ashare && ashare.time
+        ? (Date.now() - new Date(ashare.time).getTime() < 3 * 60_000 ? t('darkAshareLive') : t('darkAshareClose'))
+        : '';
+      const ashareStamp = ashare && ashare.time
+        ? new Date(ashare.time).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
+        : '';
+      const ashareText = ashare
+        ? `${t('darkAshare')} ${ashare.name || ''} ${fmtDarkPrice(ashare.price)}${ashareState ? `（${ashareState} ${ashareStamp}）` : ''}`
+        : '';
+
+      return h('section', { className: 'sw-detail' },
+        h('div', { className: 'sw-detail-head' },
+          h('div', null,
+            h('div', { className: 'sw-name-row' },
+              h('h1', { className: 'sw-detail-title' }, darkName(item.base)),
+              h('span', { className: 'sw-code-chip' }, `${item.base}${sourceLabel ? ` · ${sourceLabel}` : ''}`),
+            ),
+            h('div', { className: 'sw-price-line' },
+              h('span', { className: `sw-big-price ${toneClass(changeForBasis)}` }, fmtDarkPrice(price)),
+              cnyPrice != null ? h('span', { className: 'sw-cny' }, `≈ ${fmtCny(cnyPrice)}`) : null,
+              h('span', { className: `sw-big-change ${toneClass(changeForBasis)}` }, fmtPct(changeForBasis)),
+              h('span', { className: 'sw-basis-tag' }, basis === 'close' ? t('darkBasisTagClose') : t('darkBasisTag24h')),
+            ),
+            h('div', { className: 'sw-asof' }, asof ? fill(t('darkUpdated'), { time: asof }) : t('darkWaiting')),
+            basis === 'close' || ashare || premiumPct != null
+              ? h('div', { className: 'sw-dark-facts' },
+                  basis === 'close'
+                    ? h('span', null, refInfo
+                        ? `${t('darkRef')} ${fmtDarkPrice(refInfo.price)} @ ${darkStampLabel(refInfo.ts)}`
+                        : t('darkRefPending'))
+                    : null,
+                  ashareText ? h('span', null, ashareText) : null,
+                  !ashareText && DARK_ASHARE[item.base] ? h('span', null, t('darkAshareMissing')) : null,
+                )
+              : null,
+          ),
+          h('div', { className: 'sw-side-stats' },
+            h('div', { className: 'sw-side-stat' },
+              h('span', null, t('darkHigh')),
+              h('strong', null, fmtDarkPrice(high)),
+            ),
+            h('div', { className: 'sw-side-stat' },
+              h('span', null, t('darkLow')),
+              h('strong', null, fmtDarkPrice(low)),
+            ),
+            h('div', { className: 'sw-side-stat' },
+              h('span', null, t('darkVolume')),
+              h('strong', null, volume == null ? '—' : compactNumber(volume)),
+            ),
+            premiumPct != null
+              ? h('div', { className: 'sw-side-stat' },
+                  h('span', null, t('darkPremium')),
+                  h('strong', { className: toneClass(premiumPct) }, fmtPct(premiumPct)),
+                )
+              : null,
+          ),
+        ),
+        quote && quote.unresolved ? h('div', { className: 'sw-notice' }, h('span', null, t('darkUnresolved'))) : null,
+        quote && quote.failed ? h('div', { className: 'sw-notice' }, h('span', null, t('darkStale'))) : null,
+        failed ? h('div', { className: 'sw-notice' }, h('span', null, t('darkCandleFailed'))) : null,
+        h('div', { className: 'sw-chart-card' },
+          h('div', { className: 'sw-chart-head' },
+            h('span', { className: 'sw-chart-title' }, t('darkChartTitle')),
+            h('div', { className: 'sw-chips' },
+              h('button', {
+                type: 'button',
+                className: `sw-chip${frame === '15m' ? ' is-active' : ''}`,
+                onClick: () => onFrame('15m'),
+                'aria-pressed': frame === '15m' ? 'true' : 'false',
+              }, t('darkFrame15')),
+              h('button', {
+                type: 'button',
+                className: `sw-chip${frame === '1h' ? ' is-active' : ''}`,
+                onClick: () => onFrame('1h'),
+                'aria-pressed': frame === '1h' ? 'true' : 'false',
+              }, t('darkFrame1h')),
+              h('button', {
+                type: 'button',
+                className: `sw-chip${frame === '1d' ? ' is-active' : ''}`,
+                onClick: () => onFrame('1d'),
+                'aria-pressed': frame === '1d' ? 'true' : 'false',
+              }, t('darkFrame1d')),
+            ),
+          ),
+          h('div', { className: 'sw-chart-toolbar' },
+            h('span', { className: 'sw-dark-range' }, range || t('darkWaiting')),
+            h('span', { className: 'sw-dark-range' }, loading ? t('updating') : fill(t('darkBarCount'), { n: bars.length })),
+          ),
+          h(DarkChart, { bars, frame, loading, t }),
+        ),
+        h('p', { className: 'sw-dark-note sw-dark-proxy' }, t('darkProxyNote')),
+        h('p', { className: 'sw-dark-note' }, t('darkSourceNote')),
+        fx
+          ? h('p', { className: 'sw-dark-note' }, fill(
+              Date.now() - (fx.at || 0) > 30 * 60_000 ? t('darkCnyCached') : t('darkCnyRate'),
+              {
+                rate: fx.rate.toFixed(3),
+                time: fx.at ? new Date(fx.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+              },
+            ))
+          : null,
+        cnyOn && !fx ? h('p', { className: 'sw-dark-note' }, t('darkCnyUnavailable')) : null,
+      );
+    }
+
+    function DarkPoolBoard({ t }) {
+      const [items, setItems] = useState(loadDarkItems);
+      const [rate, setRate] = useState(loadDarkRate);
+      const [live, setLive] = useState(loadDarkLive);
+      const [quotes, setQuotes] = useState({});
+      const [history, setHistory] = useState({});
+      const [fx, setFx] = useState(loadDarkCny);
+      const [cnyOn, setCnyOn] = useState(loadDarkCnyOn);
+      const [basis, setBasis] = useState(loadDarkBasis);
+      const [refs, setRefs] = useState({});
+      const [aShares, setAShares] = useState({});
+      const [selected, setSelected] = useState(() => {
+        const list = loadDarkItems();
+        return list.length > 0 ? list[0].base : '';
+      });
+      const [frame, setFrame] = useState('15m');
+      const [candles, setCandles] = useState(null);
+      const [candleLoading, setCandleLoading] = useState(false);
+      const [candleFailed, setCandleFailed] = useState(false);
+      const [candleEpoch, setCandleEpoch] = useState(0);
+      const [fetching, setFetching] = useState(false);
+      const [updatedAt, setUpdatedAt] = useState(0);
+      const [draft, setDraft] = useState('');
+      const [formError, setFormError] = useState('');
+      const [adding, setAdding] = useState(false);
+
+      const itemsRef = useRef(items);
+      const chartKeyRef = useRef('');
+      const busyRef = useRef(false);
+      const runSeqRef = useRef(0);
+      const resolveAtRef = useRef({});
+      const failRef = useRef({});
+      const aSharesRef = useRef({});
+      useEffect(() => {
+        itemsRef.current = items;
+      }, [items]);
+      useEffect(() => {
+        saveDarkItems(items);
+      }, [items]);
+      useEffect(() => {
+        saveDarkRate(rate);
+      }, [rate]);
+      useEffect(() => {
+        saveDarkLive(live);
+      }, [live]);
+      useEffect(() => {
+        saveDarkCnyOn(cnyOn);
+      }, [cnyOn]);
+      useEffect(() => {
+        saveDarkBasis(basis);
+      }, [basis]);
+
+      const signature = items.map((item) => item.base).join(',');
+
+      // A-share reference quotes come from this plugin's own Host route, which
+      // already resolves mainland codes through the proxy-free domestic feeds.
+      const ashareCodes = Array.from(new Set(items.map((item) => DARK_ASHARE[item.base]).filter(Boolean)));
+      const ashareSig = ashareCodes.join(',');
+
+      useEffect(() => {
+        if (ashareCodes.length === 0) return undefined;
+        let alive = true;
+        const load = async () => {
+          try {
+            const response = await fetch(`/plugins/stock-watch/data?codes=${encodeURIComponent(ashareCodes.join(','))}`, {
+              headers: { Accept: 'application/json' },
+            });
+            if (!response.ok) return;
+            const body = await response.json();
+            if (!alive || !Array.isArray(body.items)) return;
+            const next = {};
+            for (const entry of body.items) {
+              if (!entry || !entry.quote) continue;
+              const code = String(entry.code || String(entry.key || '').replace(/^[A-Z]+/, ''));
+              if (!code) continue;
+              next[code] = {
+                price: toNumber(entry.quote.price),
+                changePct: toNumber(entry.quote.changePct),
+                time: entry.quote.quoteTime || null,
+                name: entry.name || '',
+              };
+            }
+            if (Object.keys(next).length > 0) {
+              aSharesRef.current = next;
+              setAShares(next);
+            }
+          } catch {
+            // Keep the previous reference quote.
+          }
+        };
+        load();
+        const timer = window.setInterval(load, DARK_ASHARE_TTL_MS);
+        return () => {
+          alive = false;
+          window.clearInterval(timer);
+        };
+      }, [ashareSig]);
+
+      // Baseline for the "since last A-share close" basis: the token price at
+      // 15:00 Asia/Shanghai of the latest completed session.
+      useEffect(() => {
+        if (basis !== 'close') return undefined;
+        let alive = true;
+        const controller = new AbortController();
+        const run = async () => {
+          const list = itemsRef.current.filter((item) => item.src && item.inst);
+          if (list.length === 0) return;
+          const fallback = darkSessionClose(Date.now());
+          const next = {};
+          await Promise.all(list.map(async (item) => {
+            const mapped = DARK_ASHARE[item.base];
+            const quote = mapped ? aSharesRef.current[mapped.slice(2)] : null;
+            const override = quote ? darkQuoteSessionClose(quote.time) : null;
+            const ts = override && override < fallback ? override : fallback;
+            try {
+              const price = await darkClosePrice(item, ts, controller.signal);
+              if (Number.isFinite(price)) next[item.base] = { ts, price };
+            } catch (error) {
+              if (error && error.name === 'AbortError') return;
+            }
+          }));
+          if (alive && Object.keys(next).length > 0) setRefs((previous) => ({ ...previous, ...next }));
+        };
+        run();
+        const timer = window.setInterval(run, 10 * 60_000);
+        return () => {
+          alive = false;
+          controller.abort();
+          window.clearInterval(timer);
+        };
+      }, [basis, signature]);
+
+      // USDT/CNY reference rate: the panel shows stock prices in CNY beside USDT.
+      useEffect(() => {
+        let alive = true;
+        const pull = async () => {
+          try {
+            const body = await darkJson('https://www.okx.com/api/v5/market/exchange-rate', undefined);
+            const rate = body && body.data && body.data[0] ? toNumber(body.data[0].usdCny) : null;
+            if (!alive || !rate) return;
+            const next = { rate, at: Date.now() };
+            setFx(next);
+            saveDarkCny(next);
+          } catch {
+            // Keep the cached rate; the note marks it as cached.
+          }
+        };
+        pull();
+        const timer = window.setInterval(pull, DARK_FX_TTL_MS);
+        return () => {
+          alive = false;
+          window.clearInterval(timer);
+        };
+      }, []);
+      useEffect(() => {
+        if (!items.some((item) => item.base === selected)) setSelected(items[0] ? items[0].base : '');
+      }, [items, selected]);
+
+      // One request per symbol each tick. The manual refresh button calls this
+      // too while paused, so the switch only stops the timer.
+      const pullQuotes = async (signal) => {
+        if (busyRef.current) return;
+        const list = itemsRef.current;
+        if (list.length === 0) {
+          setFetching(false);
+          return;
+        }
+        const seq = runSeqRef.current + 1;
+        runSeqRef.current = seq;
+        busyRef.current = true;
+        setFetching(true);
+        const next = {};
+        const resolved = [];
+        const demote = [];
+        const deadline = Date.now() + DARK_RESOLVE_BUDGET_MS;
+        try {
+          await Promise.all(list.map(async (item) => {
+            try {
+              let target = item;
+              if (!target.src || !target.inst) {
+                // A symbol nobody quotes must not re-probe every venue each tick.
+                const lastTry = resolveAtRef.current[item.base] || 0;
+                if (Date.now() - lastTry < DARK_RETRY_MS) {
+                  next[item.base] = { unresolved: true };
+                  return;
+                }
+                const found = await darkResolve(item.base, signal, deadline);
+                if (!found) {
+                  resolveAtRef.current[item.base] = Date.now();
+                  next[item.base] = { unresolved: true };
+                  return;
+                }
+                if (found.timedOut) {
+                  next[item.base] = { failed: true };
+                  return;
+                }
+                resolveAtRef.current[item.base] = 0;
+                failRef.current[item.base] = 0;
+                resolved.push(found);
+                target = found;
+              }
+              const quote = await darkQuote(target, signal);
+              if (!quote) {
+                const misses = (failRef.current[item.base] || 0) + 1;
+                failRef.current[item.base] = misses;
+                next[item.base] = { failed: true };
+                // One bad tick keeps the venue and the chart; three in a row mean
+                // the listing moved, so resolve again from scratch.
+                if (item.src && misses >= 3) demote.push(item.base);
+                return;
+              }
+              failRef.current[item.base] = 0;
+              next[item.base] = quote;
+            } catch (error) {
+              if (error && error.name === 'AbortError') return;
+              const misses = (failRef.current[item.base] || 0) + 1;
+              failRef.current[item.base] = misses;
+              next[item.base] = { failed: true };
+              if (item.src && misses >= 3) demote.push(item.base);
+            }
+          }));
+        } finally {
+          if (runSeqRef.current === seq) busyRef.current = false;
+        }
+        if (signal && signal.aborted) {
+          if (runSeqRef.current === seq) setFetching(false);
+          return;
+        }
+        // A superseded run (pause, rate change) must not write stale numbers.
+        if (runSeqRef.current !== seq) return;
+        if (resolved.length > 0 || demote.length > 0) {
+          setItems((previous) => previous.map((item) => {
+            const hit = resolved.find((entry) => entry.base === item.base);
+            if (hit) return { ...item, src: hit.src, inst: hit.inst };
+            // A remembered listing that stopped quoting gets resolved again.
+            if (demote.includes(item.base)) return { ...item, src: '', inst: '' };
+            return item;
+          }));
+        }
+        setQuotes((previous) => {
+          const merged = { ...previous };
+          for (const [base, quote] of Object.entries(next)) {
+            if (!quote) continue;
+            if (quote.failed || quote.unresolved) {
+              merged[base] = merged[base]
+                ? { ...merged[base], failed: quote.failed === true, unresolved: quote.unresolved === true }
+                : quote;
+            } else {
+              merged[base] = quote;
+            }
+          }
+          return merged;
+        });
+        setHistory((previous) => {
+          const merged = { ...previous };
+          for (const [base, quote] of Object.entries(next)) {
+            if (!quote || quote.failed || quote.unresolved || !Number.isFinite(quote.price)) continue;
+            const series = merged[base] ? merged[base].slice(-35) : [];
+            merged[base] = [...series, quote.price];
+          }
+          return merged;
+        });
+        // Do not claim a fresh update when every symbol came back empty.
+        if (Object.values(next).some((quote) => quote && Number.isFinite(quote.price))) {
+          setUpdatedAt(Date.now());
+        }
+        if (runSeqRef.current === seq) setFetching(false);
+      };
+
+      useEffect(() => {
+        if (!live) return undefined;
+        const controller = new AbortController();
+        pullQuotes(controller.signal);
+        const timer = window.setInterval(() => pullQuotes(controller.signal), rate);
+        return () => {
+          controller.abort();
+          window.clearInterval(timer);
+          // Invalidate the aborted run so its late writes cannot clear the next
+          // run's spinner or its busy flag.
+          runSeqRef.current += 1;
+          busyRef.current = false;
+          setFetching(false);
+        };
+      }, [live, rate, signature]);
+
+      const selectedItem = items.find((item) => item.base === selected) || null;
+      const selectedBase = selectedItem ? selectedItem.base : '';
+      const selectedInst = selectedItem ? selectedItem.inst : '';
+      const candleKey = selectedItem
+        ? `${selectedItem.base}|${selectedItem.src}|${selectedItem.inst}|${frame}|${candleEpoch}`
+        : '';
+
+      useEffect(() => {
+        if (!selectedItem || !selectedItem.inst) {
+          chartKeyRef.current = '';
+          setCandles(null);
+          setCandleLoading(false);
+          setCandleFailed(false);
+          return undefined;
+        }
+        // A different symbol or timeframe must not keep showing the previous chart.
+        const chartKey = `${selectedItem.base}|${frame}`;
+        if (chartKeyRef.current !== chartKey) {
+          chartKeyRef.current = chartKey;
+          setCandles(null);
+          setCandleLoading(true);
+          setCandleFailed(false);
+        }
+        let alive = true;
+        const controller = new AbortController();
+        const target = { base: selectedItem.base, src: selectedItem.src, inst: selectedItem.inst };
+        const load = async () => {
+          setCandleLoading(true);
+          try {
+            const bars = await darkCandles(target, frame, controller.signal);
+            if (!alive) return;
+            setCandles(bars);
+            setCandleFailed(false);
+            setCandleLoading(false);
+          } catch (error) {
+            if (!alive || (error && error.name === 'AbortError')) return;
+            setCandleFailed(true);
+            setCandleLoading(false);
+          }
+        };
+        load();
+        return () => {
+          alive = false;
+          controller.abort();
+        };
+      }, [candleKey]);
+
+      // While live, top the visible chart up every minute; paused means paused.
+      useEffect(() => {
+        if (!live || !selectedItem || !selectedItem.inst) return undefined;
+        const timer = window.setInterval(() => setCandleEpoch((value) => value + 1), DARK_CANDLE_TTL_MS);
+        return () => window.clearInterval(timer);
+      }, [live, selectedBase, selectedInst]);
+
+      const refresh = () => {
+        // A manual refresh is also the way to force a re-probe.
+        resolveAtRef.current = {};
+        pullQuotes(undefined);
+        setCandleEpoch((value) => value + 1);
+      };
+
+      async function addDark(event) {
+        event.preventDefault();
+        if (adding) return;
+        const tokens = draft.split(/[,，;；\s]+/).map((token) => token.trim()).filter(Boolean);
+        if (tokens.length === 0) {
+          setFormError(t('addEmpty'));
+          return;
+        }
+        const bases = [];
+        const invalid = [];
+        for (const token of tokens) {
+          const base = darkBaseOf(token);
+          if (!base) invalid.push(token);
+          else if (!bases.includes(base)) bases.push(base);
+        }
+        const known = new Set(items.map((item) => item.base));
+        const fresh = bases.filter((base) => !known.has(base));
+        if (fresh.length === 0) {
+          setFormError(invalid.length > 0 ? fill(t('darkAddError'), { codes: invalid.join(', ') }) : t('addDuplicate'));
+          return;
+        }
+        if (items.length + fresh.length > DARK_MAX) {
+          setFormError(fill(t('darkLimit'), { n: DARK_MAX }));
+          return;
+        }
+
+        setAdding(true);
+        setFormError('');
+        // One deadline for the whole batch: a dead proxy must not hold the form
+        // for five venue timeouts per symbol.
+        const deadline = Date.now() + DARK_RESOLVE_BUDGET_MS;
+        const added = [];
+        const missing = [];
+        const timed = [];
+        await Promise.all(fresh.map(async (base) => {
+          const found = await darkResolve(base, undefined, deadline).catch(() => null);
+          if (found && found.timedOut) timed.push(base);
+          else if (found) added.push(found);
+          else missing.push(base);
+        }));
+        setAdding(false);
+
+        if (added.length > 0) {
+          added.sort((left, right) => fresh.indexOf(left.base) - fresh.indexOf(right.base));
+          for (const item of added) {
+            resolveAtRef.current[item.base] = 0;
+            failRef.current[item.base] = 0;
+          }
+          setItems((previous) => [...previous, ...added]);
+          setSelected(added[0].base);
+          setDraft('');
+        }
+        if (timed.length > 0) {
+          setFormError(fill(t('darkTimedOut'), { codes: timed.join(', ') }));
+        } else if (missing.length > 0) {
+          setFormError(fill(t('darkMissing'), { codes: missing.join(', ') }));
+        } else if (invalid.length > 0) {
+          setFormError(fill(t('darkAddError'), { codes: invalid.join(', ') }));
+        } else {
+          setFormError('');
+        }
+      }
+
+      const removeDark = (base) => {
+        setItems((previous) => previous.filter((item) => item.base !== base));
+        delete resolveAtRef.current[base];
+        delete failRef.current[base];
+        setQuotes((previous) => {
+          if (!previous[base]) return previous;
+          const next = { ...previous };
+          delete next[base];
+          return next;
+        });
+        setHistory((previous) => {
+          if (!previous[base]) return previous;
+          const next = { ...previous };
+          delete next[base];
+          return next;
+        });
+      };
+      const updatedTime = updatedAt
+        ? new Date(updatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+        : null;
+
+      const basisPctOf = (base) => {
+        const quote = quotes[base];
+        if (!quote) return null;
+        if (basis !== 'close') return Number.isFinite(quote.changePct) ? quote.changePct : null;
+        const ref = refs[base];
+        if (!ref || !Number.isFinite(ref.price) || ref.price === 0 || !Number.isFinite(quote.price)) return null;
+        return ((quote.price - ref.price) / ref.price) * 100;
+      };
+      const mappedCode = selectedItem ? DARK_ASHARE[selectedItem.base] : null;
+      const ashareQuote = mappedCode ? aShares[mappedCode.slice(2)] : null;
+      const selectedQuote = selectedItem ? quotes[selectedItem.base] || null : null;
+      const premiumPct = ashareQuote && Number.isFinite(ashareQuote.price) && ashareQuote.price > 0
+        && fx && selectedQuote && Number.isFinite(selectedQuote.price)
+        ? ((selectedQuote.price * fx.rate) / ashareQuote.price - 1) * 100
+        : null;
+
+      return h('div', { className: 'sw-dark' },
+        h('div', { className: 'sw-dark-bar' },
+          h('div', { className: 'sw-dark-lead' },
+            h('strong', null, t('darkLead')),
+            h('span', null, t('darkNote')),
+            updatedTime ? h('span', null, `· ${fill(t('darkUpdated'), { time: updatedTime })}`) : null,
+          ),
+          h('div', { className: 'sw-dark-controls' },
+            h('label', { className: 'sw-dark-rate' },
+              h('span', null, t('darkRate')),
+              h('select', {
+                className: 'sw-select',
+                value: String(rate),
+                onChange: (event) => setRate(Number(event.target.value)),
+                'aria-label': t('darkRate'),
+              }, DARK_RATES.map((value) => h('option', { key: value, value: String(value) }, darkRateLabel(value, t)))),
+            ),
+            h('label', { className: 'sw-dark-rate' },
+              h('span', null, t('darkBasis')),
+              h('select', {
+                className: 'sw-select',
+                value: basis,
+                onChange: (event) => setBasis(event.target.value),
+                'aria-label': t('darkBasis'),
+              },
+                h('option', { value: '24h' }, t('darkBasis24h')),
+                h('option', { value: 'close' }, t('darkBasisClose')),
+              ),
+            ),
+            h('button', {
+              type: 'button',
+              className: `sw-chip${cnyOn ? ' is-active' : ''}`,
+              onClick: () => setCnyOn((value) => !value),
+              'aria-pressed': cnyOn ? 'true' : 'false',
+              title: t('darkCnyHint'),
+            }, `¥ ${t('darkCny')}`),
+            h('span', { id: 'sw-dark-live-hint', className: 'sw-sr-only' }, t('darkLiveHint')),
+            h('button', {
+              type: 'button',
+              className: `sw-switch${live ? ' is-on' : ''}`,
+              role: 'switch',
+              'aria-checked': live ? 'true' : 'false',
+              'aria-label': t('darkLiveLabel'),
+              'aria-describedby': 'sw-dark-live-hint',
+              onClick: () => setLive((value) => !value),
+              title: t('darkLiveHint'),
+            },
+              h('span', { className: 'sw-switch-track' }, h('span', { className: 'sw-switch-thumb' })),
+              h(SwLabel, { first: t('darkLiveOn'), second: t('darkLiveOff'), showSecond: !live }),
+            ),
+            h('button', {
+              type: 'button',
+              className: 'sw-btn',
+              onClick: refresh,
+              disabled: fetching,
+              'aria-busy': fetching ? 'true' : 'false',
+            },
+              h(RefreshIcon, { spinning: fetching }),
+              h(SwLabel, { first: t('refresh'), second: t('updating'), showSecond: fetching }),
+            ),
+          ),
+        ),
+        h('div', { className: 'sw-body' },
+          h('aside', { className: 'sw-list-panel' },
+            h('div', { className: 'sw-panel-head' },
+              h('h2', null, t('tabDark')),
+              h('span', { className: 'sw-count' }, fill(t('watchCount'), { n: items.length })),
+            ),
+            h('form', { className: 'sw-add', onSubmit: addDark },
+              h('input', {
+                className: 'sw-input',
+                value: draft,
+                onChange: (event) => {
+                  setDraft(event.target.value);
+                  if (formError) setFormError('');
+                },
+                placeholder: t('darkAddPlaceholder'),
+                'aria-label': t('darkAddPlaceholder'),
+                autoComplete: 'off',
+                spellCheck: false,
+              }),
+              h('button', { type: 'submit', className: 'sw-add-btn', disabled: adding },
+                adding ? t('darkResolving') : t('add')),
+            ),
+            formError ? h('div', { className: 'sw-form-error', role: 'alert' }, formError) : null,
+            h('p', { className: 'sw-hint' }, t('darkAddHint')),
+            items.length === 0
+              ? h('div', { className: 'sw-empty-list' },
+                  h('strong', null, t('darkEmptyTitle')),
+                  h('p', null, t('darkEmptyBody')),
+                  h('small', null, t('darkEmptyExamples')),
+                )
+              : h('div', { className: 'sw-list' },
+                  items.map((item) => h(DarkRow, {
+                    key: item.base,
+                    item,
+                    quote: quotes[item.base] || null,
+                    history: history[item.base] || [],
+                    active: item.base === selected,
+                    onSelect: () => setSelected(item.base),
+                    onRemove: () => removeDark(item.base),
+                    fx: cnyOn ? fx : null,
+                    basisPct: basisPctOf(item.base),
+                    t,
+                  })),
+                ),
+          ),
+          selectedItem
+            ? h(DarkDetail, {
+                item: selectedItem,
+                quote: quotes[selectedItem.base] || null,
+                bars: Array.isArray(candles) ? candles : [],
+                frame,
+                loading: candleLoading,
+                failed: candleFailed,
+                onFrame: setFrame,
+                fx: cnyOn ? fx : null,
+                cnyOn,
+                basis,
+                refInfo: refs[selectedItem.base] || null,
+                ashare: ashareQuote,
+                premiumPct,
+                t,
+              })
+            : h('section', { className: 'sw-detail' },
+                h('div', { className: 'sw-detail-empty' },
+                  h('strong', null, t('darkEmptyTitle')),
+                  h('p', null, t('darkEmptyBody')),
+                ),
+              ),
+        ),
       );
     }
 
@@ -1916,16 +3609,21 @@ window.__ModuleLoader__.load({
                   updatedTime ? h('span', null, fill(t('updated'), { time: updatedTime })) : null,
                 )
               : null,
-            h('button', {
-              type: 'button',
-              className: `sw-btn${tickerOn ? ' is-on' : ''}`,
-              onClick: toggleTicker,
-              title: t('taskbarTitle'),
-              'aria-pressed': tickerOn ? 'true' : 'false',
-            },
-              h('span', { className: 'sw-dot' }),
-              t('taskbar'),
-            ),
+            // The taskbar pill belongs to the watchlist: it mirrors that list.
+            // Other tabs (world / sectors / storage / dark pool) hide the control,
+            // while a pill already running keeps running.
+            view === 'watch'
+              ? h('button', {
+                  type: 'button',
+                  className: `sw-btn${tickerOn ? ' is-on' : ''}`,
+                  onClick: toggleTicker,
+                  title: t('taskbarTitle'),
+                  'aria-pressed': tickerOn ? 'true' : 'false',
+                },
+                  h('span', { className: 'sw-dot' }),
+                  t('taskbar'),
+                )
+              : null,
             view === 'watch'
               ? h('button', {
                   type: 'button',
@@ -1935,7 +3633,7 @@ window.__ModuleLoader__.load({
                   'aria-busy': market.loading ? 'true' : 'false',
                 },
                   h(RefreshIcon, { spinning: market.loading }),
-                  market.loading ? t('updating') : t('refresh'),
+                  h(SwLabel, { first: t('refresh'), second: t('updating'), showSecond: market.loading }),
                 )
               : null,
           ),
@@ -1965,6 +3663,12 @@ window.__ModuleLoader__.load({
             onClick: () => setView('storage'),
             'aria-current': view === 'storage' ? 'page' : undefined,
           }, t('tabStorage')),
+          h('button', {
+            type: 'button',
+            className: `sw-tab${view === 'dark' ? ' is-active' : ''}`,
+            onClick: () => setView('dark'),
+            'aria-current': view === 'dark' ? 'page' : undefined,
+          }, t('tabDark')),
         ),
         view === 'world'
           ? h(WorldBoard, { t })
@@ -1972,7 +3676,9 @@ window.__ModuleLoader__.load({
             ? h(SectorBoard, { t })
             : view === 'storage'
               ? h(StorageBoard, { t })
-              : h('div', { className: 'sw-body' },
+              : view === 'dark'
+                ? h(DarkPoolBoard, { t })
+                : h('div', { className: 'sw-body' },
           h('aside', { className: 'sw-list-panel' },
             h('div', { className: 'sw-panel-head' },
               h('h2', null, t('watchlist')),
@@ -2672,6 +4378,18 @@ window.__ModuleLoader__.load({
       },
         h('circle', { cx: 12, cy: 12, r: 9, stroke: 'currentColor', strokeWidth: 2, opacity: 0.22 }),
         h('path', { d: 'M21 12a9 9 0 0 0-9-9', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' }),
+      );
+    }
+
+    /**
+     * Stacked pair of labels sharing one grid cell: the cell is as wide as the
+     * longer text, so switching between them cannot resize the control or shift
+     * the controls beside it. The hidden copy is not exposed to assistive tech.
+     */
+    function SwLabel({ first, second, showSecond }) {
+      return h('span', { className: 'sw-stable-label' },
+        h('span', { className: `sw-stable-item${showSecond ? ' is-hidden' : ''}` }, first),
+        h('span', { className: `sw-stable-item${showSecond ? '' : ' is-hidden'}` }, second),
       );
     }
 

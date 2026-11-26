@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Stock Watch",
-    "description": "Track A-share and Hong Kong codes with live quotes, trend charts, and scenario analysis for the sessions ahead."
+    "description": "A-share, Hong Kong and US watchlists with live quotes, daily/weekly/monthly candles, global markets, sectors, storage spot prices, and around-the-clock dark-pool quotes for US-stock perpetuals on crypto exchanges with 15-minute and 1-hour trends, a 5 s–1 min refresh rate, and a pause switch."
   }
 }
